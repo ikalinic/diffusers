@@ -475,6 +475,7 @@ class OnnxStableDiffusion3Pipeline(DiffusionPipeline):
         callback_on_step_end: Optional[Callable[[int, int, Dict], None]] = None,
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
         max_sequence_length: int = 256,
+        precision: str = "fp32"
     ):
         r"""
         Function invoked when calling the pipeline for generation.
@@ -654,12 +655,19 @@ class OnnxStableDiffusion3Pipeline(DiffusionPipeline):
                 latent_model_input = np.concatenate([latents] * 2) if self.do_classifier_free_guidance else latents
                 # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
                 timestep = t.expand(latent_model_input.shape[0])
-
-                noise_pred = self.transformer(
-                    hidden_states=latent_model_input,
-                    timestep=timestep,
-                    encoder_hidden_states=prompt_embeds,
-                    pooled_projections=pooled_prompt_embeds,
+                if precision == "fp16":
+                    noise_pred = self.transformer(
+                    hidden_states=latent_model_input.astype(np.float16),
+                    timestep=timestep.numpy().astype(np.float16),
+                    encoder_hidden_states=prompt_embeds.astype(np.float16),
+                    pooled_projections=pooled_prompt_embeds.astype(np.float16),
+                )[0]
+                else:
+                    noise_pred = self.transformer(
+                    hidden_states=latent_model_input.astype(np.float32),
+                    timestep=timestep.numpy().astype(np.float32),
+                    encoder_hidden_states=prompt_embeds.astype(np.float32),
+                    pooled_projections=pooled_prompt_embeds.astype(np.float32),
                 )[0]
 
                 # perform guidance
